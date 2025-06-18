@@ -1,0 +1,40 @@
+import boto3
+import json
+
+# --- Config (Replace placeholders) ---
+PRODUCT_ID = "prod-xxxxxxxxxxxxx"
+PROVISIONING_ARTIFACT_ID = "pa-xxxxxxxxxxxxx"
+PROVISIONED_NAME = "core-vpc-dev"
+PARAMS_FILE = "params.json"
+
+def load_parameters(file_path):
+    with open(file_path) as f:
+        return json.load(f)
+
+def provision_product(product_id, artifact_id, name, parameters):
+    sc = boto3.client('servicecatalog')
+    response = sc.provision_product(
+        ProductId=product_id,
+        ProvisioningArtifactId=artifact_id,
+        ProvisionedProductName=name,
+        ProvisioningParameters=parameters
+    )
+    print("Provisioning started. ID:", response['RecordDetail']['ProvisionedProductId'])
+
+if __name__ == "__main__":
+    params = load_parameters(PARAMS_FILE)
+    provision_product(PRODUCT_ID, PROVISIONING_ARTIFACT_ID, PROVISIONED_NAME, params)
+
+
+
+
+
+parsm.json
+[
+  { "Key": "AvailabilityZoneId1", "Value": "default" },
+  { "Key": "AvailabilityZoneId2", "Value": "default" },
+  { "Key": "AvailabilityZoneId3", "Value": "default" },
+  { "Key": "CidrMask", "Value": "/core/network/CidrMask" },
+  { "Key": "EnvType", "Value": "/core/ec2/envtype" },
+  { "Key": "SubnetCount", "Value": "/core/network/SubnetCount" }
+]
