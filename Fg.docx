@@ -4,15 +4,7 @@ Assumptions
 	•	Storing the API key in their own CSM config
 	•	Providing Jenkins with the correct CSM parameters
 	3.	CSM entry already exists or can be created before Day 3.
-	4.	Team name must match SES role configured in Tyk for access control.
-	5.	Jenkins has permission to assume the role (Access_Role_Id) and read from the provided CSM config.
-
-
-Day
-Activity
-Owner
-Day 1
-App Team raises request to Tyk team for Dashboard API Key (for UAT or PROD)
+	4.	Team name must match SES role configured in 
 App Team
 Day 2
 Tyk Platform Team shares API Key securely with App Team
@@ -55,15 +47,7 @@ Day 1–2
 CSM_Dashboard_Secret_Access_Config_URL
 Secret config URL for the app in CSM V4
 🔸 App DevOps Team
-🔸 Same team to provide it to Jenkins
-Day 3
-CSM_Dashboard_Secret_Key_Name
-Key name inside the config that holds the API key
-🔸 App DevOps Team
-🔸 Same team
-Day 3
-CSM_Dashboard_Access_Role_Id
-IAM Role ID that Jenkins uses to access the CSM secret
+🔸 Same team to 
 🔸 App DevOps Team
 🔸 Used in Jenkins
 Day 3
