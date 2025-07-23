@@ -1,1 +1,86 @@
+Assumptions
+	1.	Tyk Platform Team will generate and securely share the Tyk Dashboard API Key on request.
+	2.	App DevOps Team is responsible for:
+	•	Storing the API key in their own CSM config
+	•	Providing Jenkins with the correct CSM parameters
+	3.	CSM entry already exists or can be created before Day 3.
+	4.	Team name must match SES role configured in Tyk for access control.
+	5.	Jenkins has permission to assume the role (Access_Role_Id) and read from the provided CSM config.
+
+
+Day
+Activity
+Owner
+Day 1
+App Team raises request to Tyk team for Dashboard API Key (for UAT or PROD)
+App Team
+Day 2
+Tyk Platform Team shares API Key securely with App Team
+Tyk Team
+Day 3
+App DevOps team stores the key in CSM V4 and captures: Role_Id, Config_URL, Key_Name
+App DevOps
+Day 4
+App Team/DevOps fills Jenkins parameters: agent, team name, dashboard URL, CSM params
+App Team
+Day 5
+Jenkins onboarding job triggered
+DevOps
+Day 6
+Verify team creation, roles, and access in Tyk dashboard
+App Team
+Day 7
+Validate SES integration and actual API token access
+App QA / DevOps
+
+All required parameters
+	•	🔹 Who provides what
+	•	🔹 What the DevOps team does
+	•	🔹 A timeline
+	•	🔹 Key assumptions
+
+
+
+Tyk Team Onboarding – Parameter Ownership and Timeline
+Parameter / Task
+Description
+Who Provides It
+Who Stores/Uses It
+Target Timeline
+Tyk Dashboard API Key
+Privileged token used by Jenkins to call Tyk APIs
+🔸 Tyk Platform Team
+🔸 App DevOps team stores it securely in CSM V4
+Day 1–2
+CSM_Dashboard_Secret_Access_Config_URL
+Secret config URL for the app in CSM V4
+🔸 App DevOps Team
+🔸 Same team to provide it to Jenkins
+Day 3
+CSM_Dashboard_Secret_Key_Name
+Key name inside the config that holds the API key
+🔸 App DevOps Team
+🔸 Same team
+Day 3
+CSM_Dashboard_Access_Role_Id
+IAM Role ID that Jenkins uses to access the CSM secret
+🔸 App DevOps Team
+🔸 Used in Jenkins
+Day 3
+Team_Name
+Name of the team to be onboarded (matches SES role)
+🔸 API Developer / App Team
+🔸 Passed to Jenkins
+Day 4
+Dashboard_URL
+Tyk Dashboard endpoint (UAT or PROD)
+🔸 DevOps / API Team
+🔸 Used in Jenkins
+Day 4
+Jenkins_Agent
+Jenkins node to execute the job
+🔸 DevOps Team
+🔸 Used in pipeline
+Day 4
+
 
