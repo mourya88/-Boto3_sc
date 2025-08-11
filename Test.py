@@ -1,3 +1,59 @@
+// Add a skip switch you can toggle from the UI
+properties([
+  parameters([
+    booleanParam(
+      name: 'SKIP_SCHEDULED_RUN',
+      defaultValue: false,
+      description: 'Set true to skip this scheduled run'
+    )
+  ])
+])
+
+pipeline {
+  agent any
+
+  stages {
+    stage('Guard: skip?') {
+      when { expression { !params.SKIP_SCHEDULED_RUN } }
+      steps {
+        echo "Proceeding with scheduled terminate..."
+      }
+    }
+
+    stage('Terminate CIT Slot 1') {
+      when { expression { !params.SKIP_SCHEDULED_RUN } }
+      steps {
+        script {
+          build job: 'OLAF_AWS_Deployment/Terminate_Slot', parameters: [
+            string(name: 'POD_NAME', value: 'BCARD'),
+            string(name: 'SLOT_NO',  value: '1'),
+            string(name: 'ENV',      value: 'CIT')
+          ], wait: false
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      script {
+        if (params.SKIP_SCHEDULED_RUN) {
+          echo "Run skipped (SKIP_SCHEDULED_RUN=true)."
+        }
+      }
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
 
 properties([
   parameters([
