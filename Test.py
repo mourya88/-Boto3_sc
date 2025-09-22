@@ -2,78 +2,82 @@ pipeline {
     agent any
 
     parameters {
-        // Slot 0
-        booleanParam(name: 'RUN_SLOT_0', defaultValue: false, description: 'Schedule deploy for CIT slot 0')
-        choice(name: 'RECREATE_SLOT_0', choices: ['false', 'true'], description: 'Recreate env for slot 0')
-
-        // Slot 1
-        booleanParam(name: 'RUN_SLOT_1', defaultValue: false, description: 'Schedule deploy for CIT slot 1')
-        choice(name: 'RECREATE_SLOT_1', choices: ['false', 'true'], description: 'Recreate env for slot 1')
-
-        // Slot 2
-        booleanParam(name: 'RUN_SLOT_2', defaultValue: false, description: 'Schedule deploy for CIT slot 2')
-        choice(name: 'RECREATE_SLOT_2', choices: ['false', 'true'], description: 'Recreate env for slot 2')
+        // Slot scheduling with OFF/TRUE/FALSE options
+        choice(name: 'RUN_SLOT_0', choices: ['OFF', 'TRUE', 'FALSE'], description: 'CIT Slot 0 schedule (OFF/TRUE=Recreate/ FALSE=No Recreate)')
+        choice(name: 'RUN_SLOT_1', choices: ['OFF', 'TRUE', 'FALSE'], description: 'CIT Slot 1 schedule (OFF/TRUE=Recreate/ FALSE=No Recreate)')
+        choice(name: 'RUN_SLOT_2', choices: ['OFF', 'TRUE', 'FALSE'], description: 'CIT Slot 2 schedule (OFF/TRUE=Recreate/ FALSE=No Recreate)')
     }
 
     stages {
         stage('CIT Deployments') {
             steps {
                 script {
-                    def envName = "CIT"
-                    def podName = "BCARD"
-                    def targetJobPath = "APIN152377/OLAF/AWS/OLAF_AWS_Deployment/Deployment_job_CIT"
+                    def envName   = "CIT"
+                    def podName   = "BCARD"
+                    def targetJob = "APIN152377/OLAF/AWS/OLAF_AWS_Deployment/Deployment_job_CIT"
 
-                    [0, 1, 2].each { slot ->
-                        if (params["RUN_SLOT_${slot}"]) {
-                            def recreateFlag = params["RECREATE_SLOT_${slot}"].toBoolean()
-                            echo "🔍 Looking up last successful build for env=${envName}, slot=${slot}"
+                    [0, 1, 2].each { slotNo ->
+                        def slotChoice = params["RUN_SLOT_${slotNo}"]
 
-                            // API URL to fetch previous builds for this job
-                            def jobUrl = "https://jenkins-oss-congo.barclays.intranet/job/APIN152377/job/OLAF/job/AWS/job/OLAF_AWS_Deployment/job/Deployment_job_CIT/api/json?tree=builds[number,result,actions[parameters[name,value]]]"
+                        if (slotChoice != 'OFF') {
+                            echo "🔄 Running scheduled deploy for ${envName} slot ${slotNo} (Recreate=${slotChoice})"
 
-                            withCredentials([usernamePassword(credentialsId: 'test-job-cred',
+                            // --- Fetch last successful build for this slot ---
+                            def jobUrl = "https://jenkins-oss-congo.barclays.intranet/job/${targetJob}/api/json?tree=builds[number,result,actions[parameters[name,value]]]"
+                            def response = ""
+                            withCredentials([usernamePassword(credentialsId: 'testjob-cred',
                                                              usernameVariable: 'USERNAME',
                                                              passwordVariable: 'PASSWORD')]) {
-                                def response = sh(
-                                    script: """curl -s -u $USERNAME:$PASSWORD "${jobUrl}" """,
+                                response = sh(
+                                    script: """curl -g -s -u "$USERNAME:$PASSWORD" "${jobUrl}" """,
                                     returnStdout: true
                                 ).trim()
+                            }
 
-                                def json = readJSON text: response
-
-                                // Find last successful build for this slot
-                                def lastBuild = json.builds.find { build ->
-                                    build.result == "SUCCESS" &&
-                                    build.actions.any { a ->
-                                        a.parameters?.any { p ->
-                                            p.name == "SLOT_NO" && p.value.toString() == "${slot}"
-                                        }
+                            def json = readJSON text: response
+                            def lastSuccessfulBuild = json.builds.find { build ->
+                                build.result == "SUCCESS" &&
+                                build.actions.any { action ->
+                                    action.parameters?.any { p ->
+                                        p.name == "SLOT_NO" && p.value.toString() == "${slotNo}"
                                     }
                                 }
+                            }
 
-                                if (lastBuild) {
-                                    def miniappsParam = lastBuild.actions.collectMany { it.parameters ?: [] }
-                                                                  .find { it.name == "MINIAPPS_TO_DEPLOY" }?.value
+                            if (!lastSuccessfulBuild) {
+                                echo "⚠️ No successful build found for slot ${slotNo}, skipping."
+                                return
+                            }
 
-                                    echo "✅ Last successful build found: #${lastBuild.number}"
-                                    echo "✅ Resolved MINIAPPS_TO_DEPLOY = ${miniappsParam}"
+                            echo "📌 Last successful build for slot ${slotNo}: #${lastSuccessfulBuild.number}"
 
-                                    // Trigger downstream deployment
-                                    build job: targetJobPath,
-                                        parameters: [
-                                            string(name: 'POD_NAME', value: podName),
-                                            string(name: 'SLOT_NO', value: "${slot}"),
-                                            string(name: 'MINIAPPS_TO_DEPLOY', value: miniappsParam ?: ""),
-                                            booleanParam(name: 'RECREATE_ENV', value: recreateFlag),
-                                            string(name: 'APPD_ENABLE', value: 'true')
-                                        ],
-                                        wait: false
-                                } else {
-                                    echo "⚠️ No successful build found for slot ${slot}, skipping deployment."
+                            def miniappsParam = ""
+                            lastSuccessfulBuild.actions.each { action ->
+                                action.parameters?.each { p ->
+                                    if (p.name == "MINIAPPS_TO_DEPLOY") {
+                                        miniappsParam = p.value
+                                    }
                                 }
                             }
+
+                            if (!miniappsParam) {
+                                echo "⚠️ MINIAPPS_TO_DEPLOY not found for slot ${slotNo}, skipping."
+                                return
+                            }
+
+                            echo "✅ Resolved MINIAPPS_TO_DEPLOY for slot ${slotNo}: ${miniappsParam}"
+
+                            // --- Trigger downstream deployment job ---
+                            build job: targetJob, parameters: [
+                                string(name: 'POD_NAME', value: podName),
+                                string(name: 'SLOT_NO', value: "${slotNo}"),
+                                string(name: 'MINIAPPS_TO_DEPLOY', value: miniappsParam),
+                                string(name: 'RECREATE_ENV', value: slotChoice), // "TRUE" or "FALSE"
+                                string(name: 'APPD_ENABLE', value: 'true')
+                            ], wait: false
+
                         } else {
-                            echo "⏭ Skipping slot ${slot} (RUN flag = false)"
+                            echo "⏭️ Skipping slot ${slotNo} (set to OFF)"
                         }
                     }
                 }
