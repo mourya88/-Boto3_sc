@@ -1,45 +1,49 @@
-import boto3
 import os
+import boto3
 
-ec2 = boto3.client("ec2")
-ssm = boto3.client("ssm")
 
 def lambda_handler(event, context):
-    # Example: look for AMIs with a given pattern (Linux)
-    linux_param = os.environ.get("LINUX_PARAM", "/ami-refresh/linux/latest-ami")
-    windows_param = os.environ.get("WINDOWS_PARAM", "/ami-refresh/windows/latest-ami")
+    """
+    Trigger an Auto Scaling Group instance refresh whenever an SSM Parameter changes.
+    Env vars:
+      - ASG_NAME       : target ASG name (e.g., demo-asg)
+      - LINUX_PARAM    : /ami-refresh/linux/latest-ami
+      - WINDOWS_PARAM  : /ami-refresh/windows/latest-ami
+    EventBridge will pass the parameter name in event['detail']['name'].
+    """
+    ssm = boto3.client("ssm")
+    asg = boto3.client("autoscaling")
 
-    # Get latest Linux AMI
-    linux_images = ec2.describe_images(
-        Owners=["self"],
-        Filters=[{"Name": "name", "Values": ["amirefresh-linux-*"]}]
-    )["Images"]
+    asg_name = os.environ["ASG_NAME"]
+    linux_param = os.environ.get("LINUX_PARAM")
+    windows_param = os.environ.get("WINDOWS_PARAM")
 
-    if linux_images:
-        latest_linux = sorted(linux_images, key=lambda x: x["CreationDate"], reverse=True)[0]
-        ssm.put_parameter(
-            Name=linux_param,
-            Value=latest_linux["ImageId"],
-            Type="String",
-            Overwrite=True
-        )
+    # EventBridge Parameter Store change event
+    detail = event.get("detail", {})
+    param_name = detail.get("name")
 
-    # Get latest Windows AMI
-    windows_images = ec2.describe_images(
-        Owners=["self"],
-        Filters=[{"Name": "name", "Values": ["amirefresh-window-*"]}]
-    )["Images"]
+    if not param_name:
+        print("No parameter change detected in event; nothing to do.")
+        return {"statusCode": 200, "body": "No parameter change detected"}
 
-    if windows_images:
-        latest_windows = sorted(windows_images, key=lambda x: x["CreationDate"], reverse=True)[0]
-        ssm.put_parameter(
-            Name=windows_param,
-            Value=latest_windows["ImageId"],
-            Type="String",
-            Overwrite=True
-        )
+    if linux_param and param_name != linux_param and windows_param and param_name != windows_param:
+        # If you only want to react to the two specific params, keep this guard:
+        print(f"Ignoring change to unrelated parameter: {param_name}")
+        return {"statusCode": 200, "body": "Irrelevant parameter change"}
 
-    return {
-        "statusCode": 200,
-        "body": "SSM parameters updated with latest AMIs"
-    }
+    # Read the new AMI ID from SSM
+    latest_ami = ssm.get_parameter(Name=param_name)["Parameter"]["Value"]
+    print(f"SSM parameter '{param_name}' updated to AMI '{latest_ami}'")
+
+    # Start a rolling refresh (keeps at least 50% healthy, 60s warmup)
+    resp = asg.start_instance_refresh(
+        AutoScalingGroupName=asg_name,
+        Preferences={
+            "MinHealthyPercentage": 50,
+            "InstanceWarmup": 60
+        }
+    )
+
+    refresh_id = resp.get("InstanceRefreshId")
+    print(f"Triggered ASG refresh '{refresh_id}' for '{asg_name}'")
+    return {"statusCode": 200, "body": f"ASG refresh started: {refresh_id}"}
