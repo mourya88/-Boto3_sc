@@ -1,4 +1,4 @@
-This section captures the end-to-end testing conducted to validate communication flow, authentication behaviour, and functional correctness across the entire integration chain — from the upstream device, through Tyk API Gateway, to the backend API hosted behind the Application Load Balancer (ALB).
+ section captures the end-to-end testing conducted to validate communication flow, authentication behaviour, and functional correctness across the entire integration chain — from the upstream device, through Tyk API Gateway, to the backend API hosted behind the Application Load Balancer (ALB).
 The objective was to ensure that all components work cohesively and that Tyk enforces the required authentication and routing logic.
 
 ⸻
