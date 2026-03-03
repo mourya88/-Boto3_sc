@@ -1,2 +1,55 @@
-Assumptions
+GitLab Branch Cleanup Automation Strategy1. Objective
+To design and implement a centralized, automated branch cleanup process across GitLab repositories that:Identifies stale branches based on last commit activityNotifies responsible contributorsEnforces a configurable grace periodSafely deletes inactive branchesMaintains full auditability
+The objective is to improve repository hygiene, reduce clutter, and maintain development efficiency without risking active work.2. Current Challenge
+Over time, repositories accumulate:Old feature branchesAbandoned development branchesMerged but undeleted branchesLong-inactive branches
+This results in:Repository clutterConfusion for developersIncreased maintenance overheadReduced visibility of active workHigher CI resource usage
+GitLab does not provide a built-in automated aging + notification + deletion workflow, therefore a controlled automation solution is required.3. Proposed Solution Overview
+Implement a centralized Branch Cleanup Automation Pipeline using:A dedicated automation repositoryGitLab Scheduled CI/CD pipelinesGitLab REST APITwo-phase cleanup model (Notify → Grace → Delete)Controlled exclusion rulesFull audit logging
+This solution will be independent of application build pipelines.4. Architecture Overview
+4.1 Separate Automation Repository
+The cleanup process will be implemented in a dedicated repository, for example:
+gitlab-branch-cleanup-automation
+This repository will contain:.gitlab-ci.yml (pipeline definition)Cleanup scripts (Python or Shell)Configuration files (projects/groups, exclusions)State tracking filesDocumentation
+Important
+This cleanup pipeline will be:Completely separate from build/test/deploy pipelinesIndependent of application repositoriesCentrally managedGoverned through controlled permissions
+No modifications are required in existing project repositories.5. High-Level System Flow
+The automation pipeline will:Run on a schedule (weekly recommended)Use GitLab API to retrieve projectsScan branches in each projectIdentify stale branches based on policyNotify branch ownersStore audit/state recordsAfter grace period, safely delete eligible branchesLog deletions for audit
+The pipeline interacts with repositories only via GitLab API — it does not clone or modify source code directly.6. Cleanup Lifecycle (Two-Phase Model)
+Phase 1 – Discovery & Notification
+Purpose: Identify stale branches and notify owners.
+Steps:Retrieve projects (via configured project list or group scan)Retrieve branches for each projectExclude:Default branch (main/master)Protected branchesConfigured exclusion patterns (release/, hotfix/, etc.)Check:Last commit dateOpen Merge RequestsLast commit authorIdentify branches older than threshold (e.g., 90 days)Notify branch ownerRecord candidate branch in state fileGenerate audit report (CSV/JSON artifact)
+No branches are deleted in this phase.Phase 2 – Grace Period & Deletion
+Purpose: Safely remove branches after waiting period.
+Steps:Read candidate list from state fileCheck if grace period has elapsed (e.g., 14 days)Re-validate:Branch still existsStill exceeds inactivity thresholdNo open Merge RequestNot protectedDelete branch via GitLab APILog deletion in audit file
+Optional: This stage can require manual approval before execution.7. Proposed Default Policy (Configurable)RuleProposed ValueInactivity threshold90 daysGrace period14 daysSkip open MRsYesSkip protected branchesYesExclude patternsrelease/, hotfix/, production/*Default branch exclusionYesAll values configurable via CI/CD variables.8. Pipeline Design
+8.1 Execution ModelImplemented as GitLab CI pipelineTriggered via Scheduled PipelinesRuns weekly for discoveryRuns weekly/daily for deletion phase8.2 Example Pipeline Structure
+Stages:discover_notifydelete_after_graceStage 1 – discover_notifyScan configured repositoriesIdentify stale branchesSend notificationsStore candidates in state fileProduce audit artifactStage 2 – delete_after_graceRead state fileCheck grace periodRe-validate eligibilityDelete branchesLog deletions
+This stage may:Run automaticallyORRequire manual approval for extra safety9. Repository Structure Example
+Example structure of the automation repositgitlab-branch-cleanup-automation/
+│
+├── .gitlab-ci.yml
+├── scripts/
+│ ├── discover_notify.py
+│ ├── delete_after_grace.py
+│
+├── config/
+│ ├── projects.txt
+│ ├── exclude_patterns.txt
+│
+├── state/
+│ ├── pending_deletions.json
+│ ├── deleted_log.json
+│
+└── README.md
+10. Authentication & Security Model
+A dedicated service account (e.g., branch-cleanup-bot) will be created.
+This account will:Be added to required projects/groupsHave minimum necessary role (Developer or Maintainer)Use Personal Access Token or Group Access TokenStore token securely as masked CI/CD variable
+This ensures:Controlled permissionsClear audit traceabilityNo dependency on individual user accounts11. Audit & Reporting
+Each pipeline run will generate:List of stale branch candidatesNotification logDeleted branch logExecution timestampProject reference
+Artifacts retained for compliance and review.
+Optional enhancements:Monthly summary reportDashboard metrics12. Safety Controls
+To prevent accidental deletion:Mandatory grace periodRe-validation before deletionProtected branch exclusionDefault branch exclusionExclusion pattern supportAudit trailOptional manual deletion approvalDry-run mode available during POC13. Rollout Plan
+Phase 1 – Policy AgreementConfirm inactivity thresholdConfirm grace periodConfirm exclusion rulesConfirm notification method
+Phase 2 – Proof of ConceptImplement automation repoConfigure limited test repositoriesRun in dry-run modeValidate reports
+Phase 3 – Controlled RolloutEnable deletion stageExpand scope graduallyMonitor for one monthMove to full production use14. BenefitsCleaner repositoriesReduced technical debtImproved developer experienceReduced CI loadTransparent governanceFully automated and auditable processZero impact on application pipelinesAssumptions
 	
