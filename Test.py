@@ -1,43 +1,30 @@
-    protected_lower=$(echo "$protected" | tr '[:upper:]' '[:lower:]')
-    default_lower=$(echo "$default_branch" | tr '[:upper:]' '[:lower:]')
-
-    if [[ "$default_lower" == "true" ]]; then
-      stale_status="active"
-      skip_reason="default_branch"
-    elif [[ "$protected_lower" == "true" ]]; then
-      stale_status="active"
-      skip_reason="protected_branch"
-    elif [[ "$open_mr" == "yes" ]]; then
-      stale_status="active"
-      skip_reason="open_merge_request"
-    else
-      commit_epoch=$(date -d "$last_commit_date" +%s 2>/dev/null || echo 0)
-      current_epoch=$(date +%s)
-      age_days=$(( (current_epoch - commit_epoch) / 86400 ))
-
-      if [[ "$commit_epoch" -eq 0 ]]; then
-        stale_status="unknown"
-        skip_reason="invalid_commit_date"
-      elif [[ "$age_days" -ge "$STALE_DAYS" ]]; then
-        stale_status="stale"
-        skip_reason=""
-      else
-        stale_status="active"
-        skip_reason="recent_commit"
-      fi
-    fi
+# =========================
+# Configuration
+# =========================
+GITLAB_BASE_URL="${GITLAB_BASE_URL:-https://app.gitlab.barcapint.com}"
+TARGET_PROJECT="${TARGET_PROJECT:-}"
+PROJECT_NAME="${PROJECT_NAME:-}"
+PER_PAGE="${PER_PAGE:-100}"
+OUTPUT_FILE="${OUTPUT_FILE:-branch_report_stale.csv}"
+STALE_DAYS="${STALE_DAYS:-90}"
 
 
-printf '"%s","%s","%s","%s","%s","%s","%s","%s","%s","%s"\n' \
-  "$PROJECT_NAME" \
-  "$branch_name" \
-  "$last_commit_date" \
-  "$last_commit_author" \
-  "$last_commit_author_email" \
-  "$protected" \
-  "$default_branch" \
-  "$open_mr" \
-  "$stale_status" \
-  "$skip_reason" \
-  >> "$OUTPUT_FILE"
 
+if [[ -z "$TARGET_PROJECT" ]]; then
+  echo "ERROR: TARGET_PROJECT is required."
+  echo 'Example: export TARGET_PROJECT="barclays/emm-digital-payments/test-bmb-funds-transfer-xapi"'
+  exit 1
+fi
+
+# If TARGET_PROJECT is numeric, treat it as project ID.
+# Otherwise, URL-encode it as project path.
+if [[ "$TARGET_PROJECT" =~ ^[0-9]+$ ]]; then
+  PROJECT_REF="$TARGET_PROJECT"
+else
+  PROJECT_REF=$(printf '%s' "$TARGET_PROJECT" | jq -sRr @uri)
+fi
+
+# If PROJECT_NAME is not provided, derive it from TARGET_PROJECT
+if [[ -z "$PROJECT_NAME" ]]; then
+  PROJECT_NAME=$(basename "$TARGET_PROJECT")
+fi
